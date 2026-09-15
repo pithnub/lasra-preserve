@@ -1,4 +1,5 @@
 import streamlit as st
+import plotly.graph_objects as go
 
 # ============================================================
 # LASRA — Ovine Drum Salting Simulator
@@ -88,7 +89,8 @@ st.markdown("""
 
 # ---------- Header ----------
 st.markdown('<div class="lasra-kicker">LASRA | PRACTITIONER LEARNING</div>', unsafe_allow_html=True)
-st.title("Ovine Drum Salting Simulator")
+st.title("PRESERVE")
+st.caption("Ovine Skin Preservation Simulator — v0.2 | LASRA practitioner learning")
 st.write(
     "Work through a realistic preservation run. There is no quiz score: "
     "make production decisions, see the likely consequences, and use the feedback to try again."
@@ -594,6 +596,188 @@ if st.button("Run the preservation simulation", type="primary"):
             "time before salting, temperature, skin preparation, chemical preparation, distribution in the drum, "
             "or drainage afterwards? What evidence would tell you the process was under control?"
         )
+
+
+
+# ============================================================
+# Evidence explorer — actual LASRA / published preservation data
+# ============================================================
+
+st.markdown("---")
+st.subheader("Evidence explorer")
+st.write(
+    "The simulator uses broad teaching rules. These graphs show the experimental evidence "
+    "behind two of the most important ideas: salt protection takes time, and drainage continues "
+    "well after the drum stops."
+)
+
+tab1, tab2 = st.tabs(["🧂 Salt uptake & protection", "💧 Brine drainage"])
+
+with tab1:
+    st.markdown("#### Salt protection develops progressively")
+    st.write(
+        "Salt lowers water activity, but uptake into hide or skin is not instantaneous. "
+        "The published hide data reproduced in LASRA's preservation trials show a lag before "
+        "the whole material reaches the ~90% salt-saturation teaching target."
+    )
+
+    # Digitised teaching approximation from Figure 10 in the supplied LASRA preservation report.
+    # The source report explicitly states: below protective level for at least 3.5 h;
+    # whole hide reaches 90% only after >9 h.
+    brine_hours = [0, 2, 3.5, 5, 7, 9, 12, 16, 20, 24]
+    brine_sat   = [0, 38, 58, 70, 81, 88, 94, 97, 99, 100]
+
+    fig_salt = go.Figure()
+    fig_salt.add_trace(go.Scatter(
+        x=brine_hours,
+        y=brine_sat,
+        mode="lines+markers",
+        name="Whole-hide salt uptake",
+        hovertemplate="%{x:g} h<br>%{y:g}% saturation<extra></extra>",
+    ))
+    fig_salt.add_hline(
+        y=90,
+        line_dash="dash",
+        annotation_text="~90% teaching target",
+        annotation_position="top left",
+    )
+    fig_salt.update_layout(
+        xaxis_title="Time after brining begins (hours)",
+        yaxis_title="Salt saturation (%)",
+        yaxis_range=[0, 105],
+        margin=dict(l=20, r=20, t=25, b=20),
+        height=390,
+        legend=dict(orientation="h"),
+    )
+    st.plotly_chart(fig_salt, use_container_width=True)
+
+    st.caption(
+        "Illustrative digitisation of the relationship shown in the LASRA preservation report "
+        "(Figure 10, after Bailey et al., 1990). Use the trend as a teaching guide rather than "
+        "as a universal plant prediction."
+    )
+
+    c_a, c_b = st.columns(2)
+    with c_a:
+        st.info(
+            "**Why freshness matters**\n\n"
+            "The report notes that, for the first ~3½ hours in the cited brining example, "
+            "salt saturation remained too low to give full protection. Salting therefore "
+            "does not instantly stop the biological clock."
+        )
+    with c_b:
+        st.info(
+            "**Why fleshing matters**\n\n"
+            "LASRA's review also shows that flesh and fat at the flesh surface markedly slow "
+            "salt uptake. Good preparation improves contact and shortens the vulnerable lag phase."
+        )
+
+    st.markdown("##### A useful mental picture")
+    st.write(
+        "Salt enters from the flesh side. The flesh surface is protected first; the middle follows; "
+        "the grain side is last. This is why even distribution, freshness and a suitable biocide "
+        "matter while salt penetration is still developing."
+    )
+
+with tab2:
+    st.markdown("#### The drum stops. Drainage doesn't.")
+    st.write(
+        "LASRA measured liquid loss from seven drum-salted woolskins for five weeks. "
+        "Almost 400 mL drained per skin in total: about half in the first 2–3 days, "
+        "around 75% by day 7, with slight drainage still occurring after five weeks."
+    )
+
+    # Approximate digitisation of the cumulative drainage curve described and graphed
+    # in "Liquid loss from salted skins". Anchored to the reported findings:
+    # ~50% by 2–3 d, ~75% by d7, almost 400 mL total by five weeks.
+    drain_days = [0, 1, 2, 3, 4, 7, 14, 21, 28, 35]
+    drain_ml   = [0, 120, 180, 215, 245, 295, 340, 360, 375, 390]
+
+    fig_drain = go.Figure()
+    fig_drain.add_trace(go.Scatter(
+        x=drain_days,
+        y=drain_ml,
+        mode="lines+markers",
+        name="Cumulative liquid drained",
+        hovertemplate="Day %{x:g}<br>%{y:g} mL per skin<extra></extra>",
+    ))
+    fig_drain.update_layout(
+        xaxis_title="Days after salting",
+        yaxis_title="Cumulative liquid drained (mL/skin)",
+        yaxis_range=[0, 420],
+        margin=dict(l=20, r=20, t=25, b=20),
+        height=390,
+        legend=dict(orientation="h"),
+    )
+    st.plotly_chart(fig_drain, use_container_width=True)
+
+    pack_day = st.slider(
+        "Explore a packing time",
+        min_value=0,
+        max_value=7,
+        value=2,
+        step=1,
+        help="Move the slider to see approximately how much drainage has occurred by the time the skins are packed.",
+        key="evidence_pack_day",
+    )
+
+    # Linear interpolation without numpy keeps the dependency list lean.
+    def interp(x, xs, ys):
+        if x <= xs[0]:
+            return ys[0]
+        if x >= xs[-1]:
+            return ys[-1]
+        for i in range(1, len(xs)):
+            if x <= xs[i]:
+                x0, x1 = xs[i-1], xs[i]
+                y0, y1 = ys[i-1], ys[i]
+                return y0 + (y1-y0) * (x-x0) / (x1-x0)
+        return ys[-1]
+
+    drained_at_pack = interp(pack_day, drain_days, drain_ml)
+    remaining = max(0, 390 - drained_at_pack)
+    pct = 100 * drained_at_pack / 390 if 390 else 0
+
+    d1, d2, d3 = st.columns(3)
+    d1.metric("Approx. drained by packing", f"{drained_at_pack:.0f} mL/skin")
+    d2.metric("Share of 5-week drainage", f"{pct:.0f}%")
+    d3.metric("Still potentially to drain", f"{remaining:.0f} mL/skin")
+
+    if pack_day == 0:
+        st.warning(
+            "Packing immediately transfers almost the whole drainage burden into the packed system. "
+            "LASRA estimated that a 3,800-skin container packed immediately could carry about "
+            "1.2 tonnes more liquid than one packed after seven days."
+        )
+    elif pack_day < 3:
+        st.warning(
+            "A substantial part of the brine associated with the wool has still not drained. "
+            "The skin moisture itself may already be near its final level — the continuing loss is "
+            "largely liquid held within the wool structure."
+        )
+    elif pack_day < 7:
+        st.info(
+            "Much of the early drainage has occurred, but the LASRA trial shows that drainage "
+            "continues beyond this point."
+        )
+    else:
+        st.success(
+            "By day 7 the LASRA trial had released about three quarters of the eventual drainage, "
+            "although slight drainage continued for weeks."
+        )
+
+    st.caption(
+        "Teaching approximation based on LASRA's 'Liquid loss from salted skins' trial. "
+        "Seven woolly lamb skins were drum salted for one hour with 45% salt, 0.5% citric acid "
+        "and 0.08% UTec G. Results describe that trial, not a universal drainage specification."
+    )
+
+    st.markdown("##### What the trial tells us")
+    st.write(
+        "Preservation is not finished simply because the drum has stopped. The practical question "
+        "after salting is not only whether the skin itself has lost moisture, but how much acidic, "
+        "salt-saturated brine remains associated with the wool and where that liquid will go after packing."
+    )
 
 
 # ============================================================
